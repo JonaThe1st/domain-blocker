@@ -1,20 +1,14 @@
 package de.jona.domainblocker
 
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
-import android.graphics.Typeface
 import android.net.VpnService
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
-import android.widget.ImageButton
-import android.widget.LinearLayout
 import android.widget.ListView
+import android.widget.SimpleAdapter
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -23,14 +17,14 @@ import com.google.android.material.snackbar.Snackbar
 import java.io.File
 
 /**
- * Main UI: activation switch (VPN permission flow), domain blocklist editing,
- * and the redirect target URL.
+ * XML-layout UI (layout/activity_main.xml). The activity body is wrapped in
+ * a try/catch so a fresh install can never crash into a flashing/white
+ * screen: any setup error is logged to crash.log and shown in the UI instead.
  */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var switchFilter: MaterialSwitch
     private lateinit var listView: ListView
-    private lateinit var adapter: DomainAdapter
     private lateinit var editDomain: EditText
     private lateinit var editRedirect: EditText
     private lateinit var crashLogView: TextView
@@ -38,22 +32,49 @@ class MainActivity : AppCompatActivity() {
     private val vpnRequestCode = 1001
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        DomainStore.init(this)
-        buildUi()
-
-        switchFilter.isChecked = isVpnRunning(this)
-        switchFilter.setOnCheckedChangeListener { _, checked ->
-            if (checked) startFilter() else stopFilter()
+        try {
+            super.onCreate(savedInstanceState)
+            bootstrap()
+        } catch (t: Throwable) {
+            // Never leave the user on a crashing/flashing screen.
+            logCrash(t)
+            renderFallback(t)
         }
-        refreshList()
-        updateCrashLog()
     }
 
     override fun onResume() {
         super.onResume()
-        switchFilter.isChecked = isVpnRunning(this)
+        if (::switchFilter.isInitialized) {
+            switchFilter.isChecked = isVpnRunning()
+            if (::editRedirect.isInitialized) editRedirect.setText(DomainStore.redirectUrl())
+        }
+    }
+
+    private fun bootstrap() {
+        setContentView(R.layout.activity_main)
+
+        switchFilter = findViewById(R.id.switch_filter)
+        listView = findViewById(R.id.list_domains)
+        editDomain = findViewById(R.id.edit_domain)
+        editRedirect = findViewById(R.id.edit_redirect)
+        crashLogView = findViewById(R.id.crash_log)
+        val btnAdd = findViewById<Button>(R.id.btn_add)
+        val btnSave = findViewById<Button>(R.id.btn_save)
+
+        DomainStore.init(this)
+
+        switchFilter.isChecked = isVpnRunning()
+        switchFilter.setOnCheckedChangeListener { _, checked ->
+            if (checked) startFilter() else stopFilter()
+        }
+        btnAdd.setOnClickListener { addDomain() }
+        btnSave.setOnClickListener {
+            DomainStore.setRedirectUrl(editRedirect.text.toString())
+            showMessage(getString(R.string.redirect_saved))
+        }
+
         editRedirect.setText(DomainStore.redirectUrl())
+        refreshList()
         updateCrashLog()
     }
 
@@ -86,6 +107,72 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun refreshList() {
+        val rows = DomainStore.all().map { mapOf("domain" to it) }
+        val adapter = SimpleAdapter(
+            this, rows, android.R.layout.simple_list_item_1,
+            arrayOf("domain"), intArrayOf(android.R.id.text1)
+        )
+        listView.adapter = adapter
+        listView.setOnItemClickListener { _, _, position, _ ->
+            val d = DomainStore.all().getOrNull(position) ?: return@setOnItemClickListener
+            DomainStore.remove(d)
+            refreshList()
+            showMessage(getString(R.string.removed_domain, d))
+        }
+    }
+
+    private fun addDomain() {
+        val raw = editDomain.text?.toString()?.trim().orEmpty()
+        if (raw.isEmpty()) return
+        if (DomainStore.add(raw)) {
+            editDomain.setText("")
+            refreshList()
+            showMessage(getString(R.string.added_domain, raw))
+        } else {
+            Toast.makeText(this, getString(R.string.invalid_domain), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showMessage(text: String) {
+        val root: View? = findViewById(android.R.id.content)
+        if (root != null) {
+            Snackbar.make(root, text, Snackbar.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun isVpnRunning(): Boolean {
+        val cm = getSystemService(Activity.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+            ?: return false
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+        return caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)
+    }
+
+    private fun logCrash(t: Throwable) {
+        try {
+            val sw = java.io.StringWriter()
+            t.printStackTrace(java.io.PrintWriter(sw))
+            val text = "${System.currentTimeMillis()}: $t\n$sw\n===\n"
+            File(filesDir, "crash.log").appendText(text)
+        } catch (_: Exception) {
+            // Logging must never mask the original problem.
+        }
+    }
+
+    private fun renderFallback(t: Throwable) {
+        try {
+            val tv = TextView(this)
+            tv.setTextColor(0xFFB00020.toInt())
+            tv.setPadding(24, 48, 24, 24)
+            tv.text = getString(R.string.crashlog_label) + "\n" + t
+            setContentView(tv)
+        } catch (_: Exception) {
+            // Nothing more we can do.
+        }
+    }
+
     private fun updateCrashLog() {
         val f = File(filesDir, "crash.log")
         if (!f.exists() || f.length() == 0L) {
@@ -97,181 +184,10 @@ class MainActivity : AppCompatActivity() {
         crashLogView.text = getString(R.string.crashlog_label) + "\n" +
             (if (text.length > 4000) text.takeLast(4000) else text)
         crashLogView.visibility = View.VISIBLE
-    }
-
-    private fun refreshList() {
-        adapter.clear()
-        adapter.addAll(DomainStore.all())
-    }
-
-    private fun showMessage(text: String) {
-        Snackbar.make(findViewById(android.R.id.content), text, Snackbar.LENGTH_SHORT).show()
-    }
-
-    private fun buildUi() {
-        val dp = resources.displayMetrics.density
-
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding((16 * dp).toInt(), (8 * dp).toInt(), (16 * dp).toInt(), (16 * dp).toInt())
-        }
-
-        // Header row: title + how-it-works hint
-        root.addView(TextView(this).apply {
-            text = getString(R.string.app_name)
-            textSize = 22f
-            typeface = Typeface.DEFAULT_BOLD
-        })
-
-        // Activation switch
-        val switchRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-            setPadding(0, (12 * dp).toInt(), 0, (12 * dp).toInt())
-        }
-        switchFilter = MaterialSwitch(this).apply {
-            id = View.generateViewId()
-        }
-        switchRow.addView(switchFilter)
-        switchRow.addView(TextView(this).apply {
-            text = getString(R.string.activate_label)
-            textSize = 16f
-            setPadding((12 * dp).toInt(), 0, 0, 0)
-        })
-        root.addView(switchRow)
-
-        // Add-domain row
-        val addRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-        editDomain = EditText(this).apply {
-            hint = getString(R.string.domain_hint)
-            setSingleLine(true)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        addRow.addView(editDomain)
-        addRow.addView(Button(this).apply {
-            text = getString(R.string.add_button)
-            setOnClickListener { addDomain() }
-        })
-        root.addView(addRow)
-
-        // List header + list
-        root.addView(TextView(this).apply {
-            text = getString(R.string.list_label)
-            textSize = 14f
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, (16 * dp).toInt(), 0, (4 * dp).toInt())
-        })
-        listView = ListView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, (240 * dp).toInt()
-            )
-        }
-        root.addView(listView)
-
-        // Redirect target
-        root.addView(TextView(this).apply {
-            text = getString(R.string.redirect_label)
-            textSize = 14f
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, (16 * dp).toInt(), 0, (4 * dp).toInt())
-        })
-        val redirectRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-        editRedirect = EditText(this).apply {
-            hint = getString(R.string.redirect_hint)
-            setSingleLine(true)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        redirectRow.addView(editRedirect)
-        redirectRow.addView(Button(this).apply {
-            text = getString(R.string.save_button)
-            setOnClickListener {
-                DomainStore.setRedirectUrl(editRedirect.text.toString())
-                showMessage(getString(R.string.redirect_saved))
-            }
-        })
-        root.addView(redirectRow)
-
-        root.addView(TextView(this).apply {
-            text = getString(R.string.blocking_hint)
-            textSize = 12f
-            setPadding(0, (12 * dp).toInt(), 0, 0)
-        })
-
-        // Crash log (only visible after a crash, tap to clear)
-        crashLogView = TextView(this).apply {
-            textSize = 11f
-            typeface = Typeface.MONOSPACE
-            setPadding(0, (12 * dp).toInt(), 0, 0)
-            visibility = View.GONE
-            setOnClickListener {
-                File(filesDir, "crash.log").delete()
-                updateCrashLog()
-                showMessage(getString(R.string.crashlog_cleared))
-            }
-        }
-        root.addView(crashLogView)
-
-        setContentView(root)
-
-        adapter = DomainAdapter(this, mutableListOf()) { domain ->
-            DomainStore.remove(domain)
-            refreshList()
-            showMessage(getString(R.string.removed_domain, domain))
-        }
-        listView.adapter = adapter
-    }
-
-    private fun addDomain() {
-        val raw = editDomain.text.toString().trim()
-        if (raw.isEmpty()) return
-        if (DomainStore.add(raw)) {
-            editDomain.setText("")
-            refreshList()
-            showMessage(getString(R.string.added_domain, raw.trim()))
-        } else {
-            Toast.makeText(this, getString(R.string.invalid_domain), Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun isVpnRunning(context: Context): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
-            ?: return false
-        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
-        return caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)
-    }
-
-    /** Simple two-line row: domain + delete button, empty state text. */
-    inner class DomainAdapter(
-        context: Context,
-        items: MutableList<String>,
-        private val onDelete: (String) -> Unit
-    ) : ArrayAdapter<String>(context, 0, items) {
-
-        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-            val domain = getItem(position) ?: return View(context)
-            val inflater = LayoutInflater.from(context)
-            val row = LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = android.view.Gravity.CENTER_VERTICAL
-                setPadding(0, (8 * resources.displayMetrics.density).toInt(), 0, 0)
-            }
-            row.addView(TextView(context).apply {
-                text = domain
-                textSize = 15f
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            })
-            val del = ImageButton(context).apply {
-                setImageResource(android.R.drawable.ic_menu_delete)
-                contentDescription = getString(R.string.delete_domain)
-                background = null
-                setOnClickListener { onDelete(domain) }
-            }
-            row.addView(del)
-            return row
+        crashLogView.setOnClickListener {
+            f.delete()
+            updateCrashLog()
+            showMessage(getString(R.string.crashlog_cleared))
         }
     }
 }
