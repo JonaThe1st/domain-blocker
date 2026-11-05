@@ -12,15 +12,15 @@ import android.widget.SimpleAdapter
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import java.io.File
 
 /**
- * XML-layout UI (layout/activity_main.xml). The activity body is wrapped in
- * a try/catch so a fresh install can never crash into a flashing/white
- * screen: any setup error is logged to crash.log and shown in the UI instead.
+ * XML-layout UI (layout/activity_main.xml). Pure platform SDK on purpose
+ * (no androidx/appcompat/material) for maximum ROM compatibility. The
+ * activity body is wrapped in a try/catch so a setup error can never leave
+ * the user on a flashing/white screen: it is logged and shown in the UI.
  */
-class MainActivity : AppCompatActivity() {
+class MainActivity : Activity() {
 
     private lateinit var switchFilter: Switch
     private lateinit var listView: ListView
