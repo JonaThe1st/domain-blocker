@@ -133,11 +133,17 @@ class BlockVpnService : VpnService() {
         if (reply != null) output.write(reply)
     }
 
-    /** Forwards a plain DNS query over a real socket and wraps the response. */
+    /**
+     * Forwards a plain DNS query over a real socket and wraps the response.
+     * The socket MUST be protect()ed: the DNS server IPs are routed through
+     * the tunnel, so an unprotected socket would send its query back into
+     * the tunnel -> infinite loop, no site resolves.
+     */
     private fun relayDns(query: ByteArray, dnsIp: String, clientIp: String, clientPort: Int, dnsPort: Int): ByteArray? {
         return try {
             val socket = DatagramSocket()
             try {
+                protect(socket)
                 socket.soTimeout = 4000
                 val remote = InetAddress.getByName(dnsIp)
                 socket.send(DatagramPacket(query, query.size, remote, dnsPort))
