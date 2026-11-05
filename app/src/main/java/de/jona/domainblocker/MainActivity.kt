@@ -9,11 +9,10 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ListView
 import android.widget.SimpleAdapter
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.google.android.material.materialswitch.MaterialSwitch
-import com.google.android.material.snackbar.Snackbar
 import java.io.File
 
 /**
@@ -23,7 +22,7 @@ import java.io.File
  */
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var switchFilter: MaterialSwitch
+    private lateinit var switchFilter: Switch
     private lateinit var listView: ListView
     private lateinit var editDomain: EditText
     private lateinit var editRedirect: EditText
@@ -135,12 +134,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showMessage(text: String) {
-        val root: View? = findViewById(android.R.id.content)
-        if (root != null) {
-            Snackbar.make(root, text, Snackbar.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
-        }
+        Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
     }
 
     private fun isVpnRunning(): Boolean {
@@ -156,6 +150,13 @@ class MainActivity : AppCompatActivity() {
             t.printStackTrace(java.io.PrintWriter(sw))
             val text = "${System.currentTimeMillis()}: $t\n$sw\n===\n"
             File(filesDir, "crash.log").appendText(text)
+            // Also write to external storage, so the log survives even if the
+            // app can never open (accessible via file manager).
+            try {
+                val ext = getExternalFilesDir(null)
+                if (ext != null) File(ext, "crash.log").appendText(text)
+            } catch (_: Exception) {
+            }
         } catch (_: Exception) {
             // Logging must never mask the original problem.
         }

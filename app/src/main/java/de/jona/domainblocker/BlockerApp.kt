@@ -19,6 +19,13 @@ class BlockerApp : Application() {
                 throwable.printStackTrace(PrintWriter(sw))
                 val text = "${System.currentTimeMillis()} ${thread.name}: $throwable\n$sw\n===\n"
                 openFileOutput("crash.log", MODE_APPEND).use { it.write(text.toByteArray()) }
+                // External copy (Android/data/de.jona.domainblocker/files) in
+                // case the app can never open to show the internal log.
+                try {
+                    val ext = getExternalFilesDir(null)
+                    ext?.let { java.io.File(it, "crash.log").appendText(text) }
+                } catch (_: Exception) {
+                }
             } catch (_: Exception) {
                 // Logging must never mask the original crash.
             } finally {
