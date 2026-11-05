@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Shield outline -->
+    <path
+        android:pathData="M54,22 L80,31 L80,52 C80,70 69,82 54,88 C39,82 28,70 28,52 L28,31 Z"
+        android:strokeColor="@color/ic_launcher_foreground"
+        android:strokeWidth="5"
+        android:fillColor="@android:color/transparent" />
+    <!-- Block sign (circle + slash) -->
+    <path
+        android:pathData="M54,44 m-12,0 a12,12 0 1,1 24,0 a12,12 0 1,1 -24,0"
+        android:strokeColor="@color/ic_launcher_foreground"
+        android:strokeWidth="5"
+        android:fillColor="@android:color/transparent" />
+    <path
+        android:pathData="M46,58 L62,42"
+        android:strokeColor="@color/ic_launcher_foreground"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
+</vector>

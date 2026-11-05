@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Domain Blocker</string>
+
+    <string name="activate_label">Blockierung aktiv</string>
+    <string name="domain_hint">Domain, z. B. instagram.com</string>
+    <string name="add_button">Blockieren</string>
+    <string name="list_label">Blockierte Domains</string>
+    <string name="redirect_label">Weiterleitung auf:</string>
+    <string name="redirect_hint">https://…</string>
+    <string name="save_button">Speichern</string>
+    <string name="blocking_hint">Hinweis: Blockierte Domains werden auf dein Gerät (127.0.0.1) umgeleitet. Normale HTTP-Seiten leiten auf die Zielseite weiter, HTTPS-Verbindungen werden blockiert. Tippen auf eine Zeile entfernt die Domain.</string>
+    <string name="vpn_permission_denied">VPN-Berechtigung nicht erteilt — Filter inaktiv.</string>
+    <string name="redirect_saved">Weiterleitungsziel gespeichert.</string>
+    <string name="invalid_domain">Ungültige Domain.</string>
+    <string name="removed_domain">%1$s entfernt.</string>
+    <string name="added_domain">%1$s blockiert.</string>
+    <string name="delete_domain">Domain entfernen</string>
+
+    <string name="notif_channel">Filterstatus</string>
+    <string name="notif_title">Domain Blocker aktiv</string>
+    <string name="notif_text">Blockierte Domains werden umgeleitet.</string>
+</resources>
