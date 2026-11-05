@@ -11,8 +11,8 @@ android {
         applicationId = "de.jona.domainblocker"
         minSdk = 26
         targetSdk = 34
-        versionCode = 6
-        versionName = "0.2.1"
+        versionCode = 7
+        versionName = "0.2.2"
     }
 
     buildTypes {
@@ -29,4 +29,9 @@ android {
     }
 }
 
-// No dependencies on purpose: pure platform SDK maximises compatibility.
+// Kotlin-stdlib only: Kotlin classes reference kotlin.jvm.internal.* at
+// runtime; without it the process dies during class loading (before any
+// app code or exception handler can run). No androidx/material.
+dependencies {
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.4.0")
+}
