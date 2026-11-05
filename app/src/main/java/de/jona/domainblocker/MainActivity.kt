@@ -20,6 +20,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.snackbar.Snackbar
+import java.io.File
 
 /**
  * Main UI: activation switch (VPN permission flow), domain blocklist editing,
@@ -32,6 +33,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adapter: DomainAdapter
     private lateinit var editDomain: EditText
     private lateinit var editRedirect: EditText
+    private lateinit var crashLogView: TextView
 
     private val vpnRequestCode = 1001
 
@@ -45,12 +47,14 @@ class MainActivity : AppCompatActivity() {
             if (checked) startFilter() else stopFilter()
         }
         refreshList()
+        updateCrashLog()
     }
 
     override fun onResume() {
         super.onResume()
         switchFilter.isChecked = isVpnRunning(this)
         editRedirect.setText(DomainStore.redirectUrl())
+        updateCrashLog()
     }
 
     private fun startFilter() {
@@ -80,6 +84,19 @@ class MainActivity : AppCompatActivity() {
                 showMessage(getString(R.string.vpn_permission_denied))
             }
         }
+    }
+
+    private fun updateCrashLog() {
+        val f = File(filesDir, "crash.log")
+        if (!f.exists() || f.length() == 0L) {
+            crashLogView.visibility = View.GONE
+            crashLogView.text = ""
+            return
+        }
+        val text = f.readText()
+        crashLogView.text = getString(R.string.crashlog_label) + "\n" +
+            (if (text.length > 4000) text.takeLast(4000) else text)
+        crashLogView.visibility = View.VISIBLE
     }
 
     private fun refreshList() {
@@ -183,6 +200,20 @@ class MainActivity : AppCompatActivity() {
             textSize = 12f
             setPadding(0, (12 * dp).toInt(), 0, 0)
         })
+
+        // Crash log (only visible after a crash, tap to clear)
+        crashLogView = TextView(this).apply {
+            textSize = 11f
+            typeface = Typeface.MONOSPACE
+            setPadding(0, (12 * dp).toInt(), 0, 0)
+            visibility = View.GONE
+            setOnClickListener {
+                File(filesDir, "crash.log").delete()
+                updateCrashLog()
+                showMessage(getString(R.string.crashlog_cleared))
+            }
+        }
+        root.addView(crashLogView)
 
         setContentView(root)
 

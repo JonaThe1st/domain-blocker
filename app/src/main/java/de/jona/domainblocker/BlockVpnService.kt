@@ -35,7 +35,7 @@ class BlockVpnService : VpnService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIF_ID, buildNotification())
+        startForegroundSafe()
         if (running.compareAndSet(false, true)) {
             val server = RedirectServer { DomainStore.redirectUrl() }
             server.start()
@@ -297,6 +297,28 @@ class BlockVpnService : VpnService() {
     // ------------------------------------------------------------------
     // Foreground notification
     // ------------------------------------------------------------------
+
+    /**
+     * API 34+ normally requires the manifest-declared foreground service
+     * type; this SDK no longer knows the `vpn` type, so fall back to
+     * FOREGROUND_SERVICE_TYPE_SPECIAL_USE when a plain startForeground is
+     * rejected.
+     */
+    private fun startForegroundSafe() {
+        val notif = buildNotification()
+        try {
+            startForeground(NOTIF_ID, notif)
+        } catch (_: Exception) {
+            try {
+                startForeground(
+                    NOTIF_ID, notif,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } catch (_: Exception) {
+                // Give up silently; tunnel thread also dies with the service.
+            }
+        }
+    }
 
     private fun buildNotification(): Notification {
         val manager = getSystemService(NotificationManager::class.java)

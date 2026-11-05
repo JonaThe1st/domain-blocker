@@ -20,4 +20,7 @@
     <string name="notif_channel">Filterstatus</string>
     <string name="notif_title">Domain Blocker aktiv</string>
     <string name="notif_text">Blockierte Domains werden umgeleitet.</string>
+
+    <string name="crashlog_label">Letzter Crash (Tippen = löschen):</string>
+    <string name="crashlog_cleared">Crash-Protokoll gelöscht.</string>
 </resources>
