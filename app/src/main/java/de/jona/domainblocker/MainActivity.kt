@@ -43,13 +43,12 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (::switchFilter.isInitialized) {
-            switchFilter.isChecked = isVpnRunningSafe()
+            // Show the user's persisted intent — the switch is a "wanted ON"
+            // control; live VPN state is checked below for self-heal.
+            switchFilter.isChecked = DomainStore.isFilterEnabled()
             if (::editRedirect.isInitialized) editRedirect.setText(DomainStore.redirectUrl())
-            // Self-heal: the user wants the filter on, but it is not
-            // running (e.g. process was killed). startFilter() is
-            // idempotent: with the VPN permission granted it just starts
-            // the service, which checks its own running state.
-            if (!switchFilter.isChecked && DomainStore.isFilterEnabled()) {
+            // Self-heal: user wants it on but the service is not running.
+            if (DomainStore.isFilterEnabled() && !isVpnRunningSafe()) {
                 startFilter()
             }
         }
@@ -68,7 +67,10 @@ class MainActivity : Activity() {
 
         DomainStore.init(this)
 
-        switchFilter.isChecked = isVpnRunningSafe()
+        // Restore the user's persisted intent FIRST, before any listener
+        // is attached, so a reopened app shows the filter state the user
+        // left it in (even if the service is not running right now).
+        switchFilter.isChecked = DomainStore.isFilterEnabled()
         switchFilter.setOnCheckedChangeListener { _, checked ->
             DomainStore.setFilterEnabled(checked)
             if (checked) startFilter() else stopFilter()
