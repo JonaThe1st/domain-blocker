@@ -14,15 +14,16 @@ fail() { echo -e "${RED}EVIDENCE FAIL:${NC} $*"; exit 1; }
 
 # ---------------------------------------------------------------- helpers
 ui_dump() {
-  # uiautomator dump, retried until the XML is actually produced (the UI
-  # is not "idle" right after app start, especially under software emulation).
+  # Dumps the UI hierarchy directly to stdout (uiautomator dump /dev/tty),
+  # retried until a real <hierarchy> document comes back. Pulling the dump
+  # from /sdcard is unreliable on modern Android (FUSE), so no file I/O here.
   for _ in 1 2 3 4 5 6; do
-    adb shell "rm -f /sdcard/ui.xml" >/dev/null 2>&1 || true
-    DUMP_OUT=$(adb shell "uiautomator dump /sdcard/ui.xml" 2>&1 || true)
-    if echo "$DUMP_OUT" | grep -q "dumped to"; then
-      adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1 && return 0
+    OUT=$(adb shell "uiautomator dump /dev/tty" 2>&1 || true)
+    if echo "$OUT" | grep -q "<hierarchy"; then
+      echo "$OUT" > /tmp/ui.xml
+      return 0
     fi
-    echo "  [ui_dump] not ready yet: $DUMP_OUT"
+    echo "  [ui_dump] not ready yet: $(echo "$OUT" | head -c 120)"
     sleep 5
   done
   return 1
