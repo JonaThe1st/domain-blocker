@@ -11,8 +11,8 @@ android {
         applicationId = "de.jona.domainblocker"
         minSdk = 26
         targetSdk = 34
-        versionCode = 36
-        versionName = "0.4.6"
+        versionCode = 37
+        versionName = "0.4.7"
     }
 
     buildTypes {
@@ -34,4 +34,8 @@ android {
 // app code or exception handler can run). No androidx/material.
 dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.4.0")
+
+    // JVM unit tests: DNS codec/matcher/server are pure JVM.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("dnsjava:dnsjava:3.5.3")
 }

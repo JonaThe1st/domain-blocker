@@ -28,20 +28,13 @@ object DomainStore {
     }
 
     /** True if [domain] (or a subdomain of it) is on the blocklist. Suffix match. */
-    fun isBlocked(domain: String): Boolean {
-        val d = domain.trim().lowercase().removeSuffix(".")
-        if (d.isEmpty()) return false
-        for (blocked in domains) {
-            if (d == blocked || d.endsWith(".$blocked")) return true
-        }
-        return false
-    }
+    fun isBlocked(domain: String): Boolean = DomainMatcher.isBlocked(domain, domains)
 
     fun all(): List<String> = domains.sorted()
 
     /** Normalizes input like "https://www.Instagram.com/foo" -> "instagram.com". */
     fun add(raw: String): Boolean {
-        val host = normalize(raw) ?: return false
+        val host = DomainMatcher.normalize(raw) ?: return false
         if (!domains.add(host)) return false
         persist()
         return true
@@ -64,16 +57,6 @@ object DomainStore {
     }
 
     fun isFilterEnabled(): Boolean = prefs.getBoolean(KEY_FILTER_ENABLED, false)
-
-    private fun normalize(raw: String): String? {
-        var s = raw.trim().lowercase()
-            .removePrefix("https://").removePrefix("http://")
-        var host = s.substringBefore('/').substringBefore(':')
-        if (host.startsWith("www.")) host = host.removePrefix("www.")
-        host = host.removeSuffix(".")
-        if (host.isEmpty() || host.contains(' ') || !host.contains('.')) return null
-        return host
-    }
 
     private fun persist() {
         prefs.edit().putStringSet(KEY_DOMAINS, domains.toSet()).apply()

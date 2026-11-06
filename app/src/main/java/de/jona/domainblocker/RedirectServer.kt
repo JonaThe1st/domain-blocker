@@ -17,7 +17,10 @@ import java.util.concurrent.atomic.AtomicBoolean
  * domain reach 127.0.0.1:443, where nothing listens -> connection refused
  * (blocked, but not redirectable without a MITM certificate).
  */
-class RedirectServer(private val redirectUrlProvider: () -> String) {
+class RedirectServer(
+    private val redirectUrlProvider: () -> String,
+    private val port: Int = 80
+) {
 
     private val running = AtomicBoolean(false)
     private var thread: Thread? = null
@@ -27,7 +30,7 @@ class RedirectServer(private val redirectUrlProvider: () -> String) {
         thread = Thread {
             var server: ServerSocket? = null
             try {
-                server = ServerSocket(80, 8, java.net.InetAddress.getByName("127.0.0.1"))
+                server = ServerSocket(port, 8, java.net.InetAddress.getByName("127.0.0.1"))
                 while (running.get()) {
                     try {
                         handle(server!!.accept())
@@ -59,6 +62,9 @@ class RedirectServer(private val redirectUrlProvider: () -> String) {
         thread?.interrupt()
         thread = null
     }
+
+    /** Test/diagnostic helper: whether the accept loop was entered. */
+    fun isRunning(): Boolean = running.get()
 
     private fun handle(socket: Socket) {
         socket.use { s ->
