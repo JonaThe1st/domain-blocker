@@ -3,6 +3,7 @@ package de.jona.domainblocker
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.net.VpnService
@@ -38,9 +39,11 @@ class BlockVpnService : VpnService() {
     override fun onCreate() {
         super.onCreate()
         DomainStore.init(this)
+        CrashLog.write(this, "== service onCreate")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        CrashLog.write(this, "onStartCommand intent=$intent running=${running.get()}")
         startForegroundSafe()
         if (running.compareAndSet(false, true)) {
             val server = RedirectServer { DomainStore.redirectUrl() }
@@ -52,6 +55,7 @@ class BlockVpnService : VpnService() {
     }
 
     override fun onDestroy() {
+        CrashLog.write(this, "onDestroy filterEnabled=${DomainStore.isFilterEnabled()} running=${running.get()}")
         running.set(false)
         redirectServer?.stop()
         redirectServer = null
@@ -59,11 +63,28 @@ class BlockVpnService : VpnService() {
         tunFd = null
         relayPool.shutdownNow()
         super.onDestroy()
+        // Self-heal: if the tunnel died without the user switching the
+        // filter off, bring the service back in a few seconds. This covers
+        // Android/Samsung killing the service while the user wants it on.
+        if (DomainStore.isFilterEnabled()) {
+            scheduleRestart()
+        }
+    }
+
+    private fun scheduleRestart() {
+        try {
+            val am = getSystemService(AlarmManager::class.java)
+            val pi = PendingIntent.getService(
+                this, 0, Intent(this, BlockVpnService::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            am.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + RESTART_DELAY_MS, pi)
+        } catch (_: Exception) {
+        }
     }
 
     override fun onRevoke() {
-        // User revoked the VPN permission. The system tears the tunnel down;
-        // stop the service so the notification disappears too.
+        CrashLog.write(this, "onRevoke — user revoked VPN permission")
         stopSelf()
         super.onRevoke()
     }
@@ -94,9 +115,12 @@ class BlockVpnService : VpnService() {
                 if (len < 0) break
                 handlePacket(buffer, len, output)
             }
-        } catch (_: Exception) {
-            // Tunnel teardown / revoked permission — service stops itself.
+        } catch (t: Exception) {
+            // Tunnel teardown / revoked permission. Record why, so a
+            // recurring kill is visible in the UI (crash.log).
+            CrashLog.write(this, "tunnel error: $t")
         } finally {
+            CrashLog.write(this, "tunnel exit running=${running.get()} filterEnabled=${DomainStore.isFilterEnabled()}")
             running.set(false)
             redirectServer?.stop()
             tunFd?.close()
@@ -407,5 +431,7 @@ class BlockVpnService : VpnService() {
         private const val DNS_1 = "8.8.8.8"
         private const val DNS_2 = "1.1.1.1"
         private const val DNS_3 = "9.9.9.9"
+
+        private const val RESTART_DELAY_MS = 5000L
     }
 }

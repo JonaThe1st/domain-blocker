@@ -67,6 +67,18 @@ class MainActivity : Activity() {
 
         DomainStore.init(this)
 
+        // Android 13+: without POST_NOTIFICATIONS the persistent VPN
+        // notification never shows, which makes Samsung's task killer treat
+        // the app as idle and kill the service. Ask once at first start.
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 2001
+            )
+        }
+
         // Restore the user's persisted intent FIRST, before any listener
         // is attached, so a reopened app shows the filter state the user
         // left it in (even if the service is not running right now).
