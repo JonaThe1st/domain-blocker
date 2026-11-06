@@ -37,9 +37,9 @@ jobs:
       - name: Emulator run (service + DNS + stability)
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 34
           arch: x86_64
-          target: google_apis
+          target: aosp_atd
           profile: pixel_6
           disable-animations: true
           boot-timeout: 1500
