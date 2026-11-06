@@ -32,6 +32,8 @@ jobs:
           java-version: 17
       - name: Build release APK
         run: ./gradlew assembleRelease --no-daemon
+      - name: Check KVM availability
+        run: ls -la /dev/kvm || echo "NO_KVM (software emulation)"
       - name: Emulator run (service + DNS + stability)
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -40,6 +42,7 @@ jobs:
           target: google_apis
           profile: pixel_6
           disable-animations: true
+          boot-timeout: 1500
           script: bash .github/scripts/emulator-test.sh
       - name: Upload logcat + screenshots
         if: always()
