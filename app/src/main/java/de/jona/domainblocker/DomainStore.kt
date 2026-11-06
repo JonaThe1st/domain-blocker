@@ -14,6 +14,7 @@ object DomainStore {
     private const val PREFS = "domain_blocker"
     private const val KEY_DOMAINS = "domains"
     private const val KEY_REDIRECT = "redirect_url"
+    private const val KEY_FILTER_ENABLED = "filter_enabled"
 
     const val DEFAULT_REDIRECT = "https://de.wikipedia.org/wiki/Fokus"
 
@@ -56,6 +57,13 @@ object DomainStore {
     fun setRedirectUrl(url: String) {
         prefs.edit().putString(KEY_REDIRECT, url.trim().ifEmpty { DEFAULT_REDIRECT }).apply()
     }
+
+    /** Persisted intent: the user wants the filter ON (for self-heal + boot). */
+    fun setFilterEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_FILTER_ENABLED, enabled).apply()
+    }
+
+    fun isFilterEnabled(): Boolean = prefs.getBoolean(KEY_FILTER_ENABLED, false)
 
     private fun normalize(raw: String): String? {
         var s = raw.trim().lowercase()

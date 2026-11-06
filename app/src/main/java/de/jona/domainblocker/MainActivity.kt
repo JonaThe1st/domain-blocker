@@ -45,6 +45,13 @@ class MainActivity : Activity() {
         if (::switchFilter.isInitialized) {
             switchFilter.isChecked = isVpnRunningSafe()
             if (::editRedirect.isInitialized) editRedirect.setText(DomainStore.redirectUrl())
+            // Self-heal: the user wants the filter on, but it is not
+            // running (e.g. process was killed). startFilter() is
+            // idempotent: with the VPN permission granted it just starts
+            // the service, which checks its own running state.
+            if (!switchFilter.isChecked && DomainStore.isFilterEnabled()) {
+                startFilter()
+            }
         }
     }
 
@@ -63,6 +70,7 @@ class MainActivity : Activity() {
 
         switchFilter.isChecked = isVpnRunningSafe()
         switchFilter.setOnCheckedChangeListener { _, checked ->
+            DomainStore.setFilterEnabled(checked)
             if (checked) startFilter() else stopFilter()
         }
         btnAdd.setOnClickListener { addDomain() }
