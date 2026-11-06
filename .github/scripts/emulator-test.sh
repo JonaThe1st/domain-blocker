@@ -13,30 +13,45 @@ ok()   { echo -e "${GREEN}EVIDENCE OK:${NC} $*"; }
 fail() { echo -e "${RED}EVIDENCE FAIL:${NC} $*"; exit 1; }
 
 # ---------------------------------------------------------------- helpers
+ui_dump() {
+  # uiautomator dump, retried until the XML is actually produced (the UI
+  # is not "idle" right after app start, especially under software emulation).
+  for _ in 1 2 3 4 5 6; do
+    adb shell "rm -f /sdcard/ui.xml" >/dev/null 2>&1 || true
+    DUMP_OUT=$(adb shell "uiautomator dump /sdcard/ui.xml" 2>&1 || true)
+    if echo "$DUMP_OUT" | grep -q "dumped to"; then
+      adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1 && return 0
+    fi
+    echo "  [ui_dump] not ready yet: $DUMP_OUT"
+    sleep 5
+  done
+  return 1
+}
+
 tap_by_resid() {
   # $1 = resource-id suffix; taps the center of the node.
   local resid="de.jona.domainblocker:id/$1"
-  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 || true
-  adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1 || true
-  python3 - "$resid" <<'PY' || true
+  ui_dump || { fail "uiautomator dump failed, cannot tap $1"; }
+  python3 - "$resid" <<'PY'
 import re, sys, subprocess
 resid = sys.argv[1]
 xml = open('/tmp/ui.xml', encoding='utf-8', errors='replace').read()
 m = re.search(r'resource-id="' + re.escape(resid) + r'"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', xml)
 if not m:
-    raise SystemExit(1)
+    raise SystemExit(2)
 x = (int(m.group(1)) + int(m.group(3))) // 2
 y = (int(m.group(2)) + int(m.group(4))) // 2
 subprocess.run(['adb', 'shell', 'input', 'tap', str(x), str(y)])
 PY
+  RC=$?
+  [ $RC -eq 0 ] || fail "widget $1 not found in UI dump"
   sleep 1
 }
 
 tap_system_button() {
   # Taps a system dialog button whose text is in the given list ($@).
-  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 || true
-  adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1 || true
-  python3 - "$@" <<'PY' || true
+  ui_dump || { fail "uiautomator dump failed, cannot tap system button"; }
+  python3 - "$@" <<'PY'
 import re, sys, subprocess
 wanted = set(sys.argv[1:])
 xml = open('/tmp/ui.xml', encoding='utf-8', errors='replace').read()
@@ -46,9 +61,11 @@ for m in re.finditer(r'text="([^"]*)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]
         y = (int(m.group(3)) + int(m.group(5))) // 2
         subprocess.run(['adb', 'shell', 'input', 'tap', str(x), str(y)])
         raise SystemExit(0)
-raise SystemExit(1)
+raise SystemExit(2)
 PY
-  sleep 2
+  RC=$?
+  [ $RC -eq 0 ] || fail "system dialog button not found (tried: $*)"
+  sleep 3
 }
 
 service_alive() {
@@ -107,20 +124,20 @@ say "== install & start =="
 adb install -r app/build/outputs/apk/release/app-release.apk || fail "install"
 adb shell pm grant $PKG android.permission.POST_NOTIFICATIONS 2>/dev/null || true
 adb shell am start -n $PKG/$APP
-sleep 5
+sleep 15   # software emulation is slow; let the layout settle
 
 say "== blocklist: add instagram.com via UI =="
 tap_by_resid edit_domain
 adb shell input text 'instagram.com'
-sleep 1
-tap_by_resid btn_add
 sleep 2
+tap_by_resid btn_add
+sleep 3
 
 say "== enable filter (switch + VPN dialog) =="
 tap_by_resid switch_filter
-sleep 3
+sleep 5
 tap_system_button "OK" "Allow" "Verbinden" "Connect" "Erlauben"
-sleep 4
+sleep 6
 
 ALIVE=$(service_alive)
 say "service alive right after enable: $ALIVE"
