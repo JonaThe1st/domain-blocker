@@ -11,8 +11,8 @@ android {
         applicationId = "de.jona.domainblocker"
         minSdk = 26
         targetSdk = 34
-        versionCode = 34
-        versionName = "0.4.4"
+        versionCode = 35
+        versionName = "0.4.5"
     }
 
     buildTypes {
