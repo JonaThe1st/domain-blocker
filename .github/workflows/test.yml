@@ -42,7 +42,7 @@ jobs:
           target: aosp_atd
           profile: pixel_6
           disable-animations: true
-          boot-timeout: 1500
+          emulator-boot-timeout: 1800
           script: bash .github/scripts/emulator-test.sh
       - name: Upload logcat + screenshots
         if: always()
