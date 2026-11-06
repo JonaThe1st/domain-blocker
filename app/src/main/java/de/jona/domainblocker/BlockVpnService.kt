@@ -12,6 +12,7 @@ import java.io.FileOutputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -28,6 +29,11 @@ class BlockVpnService : VpnService() {
     private val running = AtomicBoolean(false)
     private var tunFd: ParcelFileDescriptor? = null
     private var redirectServer: RedirectServer? = null
+    // Loopback / ping-pong guard: a UDP response that came back to the
+    // relay socket (never should) is ignored, but the tunnel read loop must
+    // NEVER block on a synchronous relay, or one slow real-DNS server stalls
+    // every other DNS lookup (and can trip the foreground-service watchdog).
+    private val relayPool = Executors.newCachedThreadPool()
 
     override fun onCreate() {
         super.onCreate()
@@ -51,6 +57,7 @@ class BlockVpnService : VpnService() {
         redirectServer = null
         tunFd?.close()
         tunFd = null
+        relayPool.shutdownNow()
         super.onDestroy()
     }
 
@@ -124,22 +131,67 @@ class BlockVpnService : VpnService() {
 
         val payload = buf.copyOfRange(ihl + 8, ihl + udpLen)
         val parsed = parseDnsQuery(payload) ?: return
-        val reply = if (DomainStore.isBlocked(parsed.domain)) {
+        if (DomainStore.isBlocked(parsed.domain)) {
             val dns = dnsBlockedReply(payload, parsed)
-            wrapIpResponse(dns, dns.size, dstIp, srcIp, 53, srcPort)
+            val reply = wrapIpResponse(dns, dns.size, dstIp, srcIp, 53, srcPort)
+            try {
+                output.write(reply)
+            } catch (_: Exception) {
+                // Tunnel write failed — drop the packet, keep reading.
+            }
         } else {
-            relayDns(payload, dstIp, srcIp, srcPort, dstPort)
+            // Never block the tunnel read loop on a network relay. Real
+            // DNS servers can be slow or unreachable; a synchronous relay
+            // here would stall every other lookup and can make the app
+            // look fully dead. Relay happens on a worker thread; the reply
+            // is written to the tunnel from there (a short, hold-safe write
+            // to the TUN file descriptor is thread-safe).
+            relayDnsAsync(output, payload, dstIp, srcIp, srcPort, dstPort)
         }
-        if (reply != null) output.write(reply)
+    }
+
+    /** Asynchronous fan-out relay for one real DNS query. */
+    private fun relayDnsAsync(
+        output: FileOutputStream,
+        query: ByteArray,
+        dnsIp: String,
+        clientIp: String,
+        clientPort: Int,
+        dnsPort: Int
+    ) {
+        if (!running.get()) return
+        try {
+            relayPool.execute {
+                try {
+                    // Fast path: if a single DNS server IPs routes here (the
+                    // common single-server case), relay directly; otherwise
+                    // try each routed DNS server in order until one answers.
+                    for (target in arrayOf(dnsIp, DNS_1, DNS_2, DNS_3)) {
+                        if (!running.get()) return@execute
+                        val reply = relayDnsTo(query, target, clientIp, clientPort, dnsPort)
+                        if (reply != null) {
+                            try {
+                                output.write(reply)
+                            } catch (_: Exception) {
+                            }
+                            return@execute
+                        }
+                    }
+                } catch (_: Exception) {
+                    // Relay failure — this DNS challenge is simply unresolved.
+                }
+            }
+        } catch (_: Exception) {
+            // Pool rejected — drop rather than block the tunnel loop.
+        }
     }
 
     /**
-     * Forwards a plain DNS query over a real socket and wraps the response.
-     * The socket MUST be protect()ed: the DNS server IPs are routed through
-     * the tunnel, so an unprotected socket would send its query back into
-     * the tunnel -> infinite loop, no site resolves.
+     * Sends one DNS query to a real server via a protect()ed socket and
+     * wraps the response for the tunnel. Returns null when the server
+     * cannot be reached or times out.
      */
-    private fun relayDns(query: ByteArray, dnsIp: String, clientIp: String, clientPort: Int, dnsPort: Int): ByteArray? {
+    private fun relayDnsTo(query: ByteArray, dnsIp: String, clientIp: String, clientPort: Int, dnsPort: Int): ByteArray? {
         return try {
             val socket = DatagramSocket()
             try {
