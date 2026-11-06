@@ -14,17 +14,17 @@ fail() { echo -e "${RED}EVIDENCE FAIL:${NC} $*"; exit 1; }
 
 # ---------------------------------------------------------------- helpers
 ui_dump() {
-  # Dumps the UI hierarchy directly to stdout (uiautomator dump /dev/tty),
-  # retried until a real <hierarchy> document comes back. Pulling the dump
-  # from /sdcard is unreliable on modern Android (FUSE), so no file I/O here.
-  for _ in 1 2 3 4 5 6; do
-    OUT=$(adb shell "uiautomator dump /dev/tty" 2>&1 || true)
+  # Dumps to /sdcard and cats it back in the SAME shell session: adb pull of
+  # /sdcard files is unreliable on modern Android (FUSE), and /dev/tty output
+  # is swallowed. Retried until a real <hierarchy> document comes back.
+  for _ in $(seq 1 8); do
+    OUT=$(adb shell "uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; cat /sdcard/ui.xml 2>/dev/null" 2>&1 || true)
     if echo "$OUT" | grep -q "<hierarchy"; then
       echo "$OUT" > /tmp/ui.xml
       return 0
     fi
-    echo "  [ui_dump] not ready yet: $(echo "$OUT" | head -c 120)"
-    sleep 5
+    echo "  [ui_dump] not ready yet: $(echo "$OUT" | head -c 100)"
+    sleep 8
   done
   return 1
 }
@@ -65,8 +65,12 @@ for m in re.finditer(r'text="([^"]*)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]
 raise SystemExit(2)
 PY
   RC=$?
-  [ $RC -eq 0 ] || fail "system dialog button not found (tried: $*)"
-  sleep 3
+  if [ $RC -eq 0 ]; then
+    sleep 3
+    return 0
+  fi
+  echo "  [tap_system_button] no button with text ($*) in dump"
+  return 1
 }
 
 service_alive() {
@@ -136,9 +140,19 @@ sleep 3
 
 say "== enable filter (switch + VPN dialog) =="
 tap_by_resid switch_filter
-sleep 5
-tap_system_button "OK" "Allow" "Verbinden" "Connect" "Erlauben"
-sleep 6
+sleep 8
+# The dialog can appear late under software emulation; give it a few tries.
+DIALOG_OK=0
+for _ in 1 2 3; do
+  if tap_system_button "OK" "Allow" "Verbinden" "Connect" "Erlauben"; then
+    DIALOG_OK=1
+    break
+  fi
+  echo "  [vpn-dialog] retrying..."
+  sleep 10
+done
+[ "$DIALOG_OK" -eq 1 ] || fail "VPN permission dialog never appeared/confirmed"
+sleep 8
 
 ALIVE=$(service_alive)
 say "service alive right after enable: $ALIVE"
