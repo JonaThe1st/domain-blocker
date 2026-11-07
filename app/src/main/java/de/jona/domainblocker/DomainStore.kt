@@ -1,6 +1,7 @@
 package de.jona.domainblocker
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import java.util.concurrent.ConcurrentHashMap
 
@@ -10,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
  * every change, so the service picks it up without a restart.
  */
 object DomainStore {
+    const val ACTION_DOMAINS_CHANGED = "de.jona.domainblocker.action.DOMAINS_CHANGED"
 
     private const val PREFS = "domain_blocker"
     private const val KEY_DOMAINS = "domains"
@@ -19,29 +21,48 @@ object DomainStore {
     const val DEFAULT_REDIRECT = "https://de.wikipedia.org/wiki/Fokus"
 
     private val domains = ConcurrentHashMap.newKeySet<String>()
+    @Volatile
+    private var domainSnapshot: Set<String> = emptySet()
     private lateinit var prefs: SharedPreferences
 
+    @Volatile
+    var version: Long = 0
+        private set
+    private lateinit var appContext: Context
+
     fun init(context: Context) {
-        prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        appContext = context.applicationContext
+        prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         domains.clear()
         domains.addAll(prefs.getStringSet(KEY_DOMAINS, emptySet()) ?: emptySet())
+        publishSnapshot()
+    }
+
+    fun reload(context: Context) {
+        init(context)
     }
 
     /** True if [domain] (or a subdomain of it) is on the blocklist. Suffix match. */
-    fun isBlocked(domain: String): Boolean = DomainMatcher.isBlocked(domain, domains)
+    fun isBlocked(domain: String): Boolean = DomainMatcher.isBlocked(domain, domainSnapshot)
 
-    fun all(): List<String> = domains.sorted()
+    fun all(): List<String> = domainSnapshot.sorted()
 
     /** Normalizes input like "https://www.Instagram.com/foo" -> "instagram.com". */
     fun add(raw: String): Boolean {
         val host = DomainMatcher.normalize(raw) ?: return false
         if (!domains.add(host)) return false
+        publishSnapshot()
         persist()
+        broadcastChanged()
         return true
     }
 
     fun remove(domain: String) {
-        if (domains.remove(domain)) persist()
+        if (domains.remove(domain)) {
+            publishSnapshot()
+            persist()
+            broadcastChanged()
+        }
     }
 
     fun redirectUrl(): String =
@@ -60,5 +81,18 @@ object DomainStore {
 
     private fun persist() {
         prefs.edit().putStringSet(KEY_DOMAINS, domains.toSet()).apply()
+    }
+
+    private fun broadcastChanged() {
+        appContext.sendBroadcast(
+            Intent(ACTION_DOMAINS_CHANGED)
+                .setPackage(appContext.packageName)
+                .putExtra("version", version)
+        )
+    }
+
+    private fun publishSnapshot() {
+        domainSnapshot = domains.toSet()
+        version++
     }
 }

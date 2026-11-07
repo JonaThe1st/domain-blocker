@@ -1,7 +1,10 @@
 package de.jona.domainblocker
 
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.VpnService
 import android.os.Bundle
 import android.view.View
@@ -27,6 +30,11 @@ class MainActivity : Activity() {
     private lateinit var editDomain: EditText
     private lateinit var editRedirect: EditText
     private lateinit var crashLogView: TextView
+    private val domainsChangedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == DomainStore.ACTION_DOMAINS_CHANGED) refreshList()
+        }
+    }
 
     private val vpnRequestCode = 1001
 
@@ -50,6 +58,17 @@ class MainActivity : Activity() {
                 startFilter()
             }
         }
+
+    }
+
+    override fun onStart() {
+        super.onStart()
+        registerReceiver(domainsChangedReceiver, IntentFilter(DomainStore.ACTION_DOMAINS_CHANGED))
+    }
+
+    override fun onStop() {
+        unregisterReceiver(domainsChangedReceiver)
+        super.onStop()
     }
 
     private fun bootstrap() {

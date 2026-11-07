@@ -5,7 +5,10 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import java.io.FileInputStream
@@ -30,6 +33,13 @@ class BlockVpnService : VpnService() {
     private val running = AtomicBoolean(false)
     private var tunFd: ParcelFileDescriptor? = null
     private var redirectServer: RedirectServer? = null
+    private val domainsChangedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == DomainStore.ACTION_DOMAINS_CHANGED) {
+                DomainStore.reload(context)
+            }
+        }
+    }
     // The tunnel read loop must NEVER block on a synchronous relay, or one
     // slow real-DNS server stalls every other lookup (and can make the app
     // look dead). Relays run on worker threads; replies are written to the
@@ -40,6 +50,7 @@ class BlockVpnService : VpnService() {
         super.onCreate()
         isRunning = false
         DomainStore.init(this)
+        registerReceiver(domainsChangedReceiver, IntentFilter(DomainStore.ACTION_DOMAINS_CHANGED))
         CrashLog.write(this, "== service onCreate")
     }
 
@@ -65,6 +76,7 @@ class BlockVpnService : VpnService() {
     override fun onDestroy() {
         CrashLog.write(this, "onDestroy filterEnabled=${DomainStore.isFilterEnabled()} running=${running.get()}")
         stopTunnel()
+        unregisterReceiver(domainsChangedReceiver)
         super.onDestroy()
         // Self-heal: if the tunnel died without the user switching the
         // filter off, bring the service back in a few seconds. This covers
