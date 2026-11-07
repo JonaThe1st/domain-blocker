@@ -79,15 +79,17 @@ object DnsCodec {
         val totalLen = 20 + udpLen
         val out = ByteArray(totalLen)
 
-        // IPv4 header
+        // IPv4 header — source must be the responder (fromIp), destination
+        // the client (toIp); earlier versions had these swapped, which made
+        // every wrapped reply go back to the DNS server instead of the client.
         out[0] = 0x45
         out[1] = 0x00
         out[2] = (totalLen ushr 8).toByte(); out[3] = totalLen.toByte()
         out[6] = 0x00; out[7] = 0x00 // no fragmentation
         out[8] = 0x40                 // TTL 64
         out[9] = PROTO_UDP.toByte()
-        writeIp(out, 12, toIp)
-        writeIp(out, 16, fromIp)
+        writeIp(out, 12, fromIp)
+        writeIp(out, 16, toIp)
         writeChecksum(out, 0, 20)
 
         // UDP header
@@ -123,14 +125,17 @@ object DnsCodec {
         buf[offset + 11] = cs.toByte()
     }
 
-    /** UDP checksum including the IPv4 pseudo-header. */
+    /** UDP checksum including the IPv4 pseudo-header (RFC 768). */
     private fun writeUdpChecksum(buf: ByteArray, udpOffset: Int, udpLen: Int, srcIp: String, dstIp: String) {
         val src = srcIp.split('.').map { it.toInt() and 0xFF }
         val dst = dstIp.split('.').map { it.toInt() and 0xFF }
         var sum = 0
-        for (i in 0..3) {
-            sum += (src[i] shl 8) or dst[i]
-        }
+        // Pseudo-header (RFC 768): source address, then destination address,
+        // as 16-bit words, then protocol + UDP length. The old code merged
+        // src[i] with dst[i] byte-by-byte — that produced checksums real
+        // clients reject, which made every relayed/blocked reply get dropped.
+        for (i in 0..3 step 2) sum += (src[i] shl 8) or src[i + 1]
+        for (i in 0..3 step 2) sum += (dst[i] shl 8) or dst[i + 1]
         sum += PROTO_UDP
         sum += udpLen
         var i = udpOffset

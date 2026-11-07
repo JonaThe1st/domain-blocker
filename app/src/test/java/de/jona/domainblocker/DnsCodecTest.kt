@@ -145,8 +145,9 @@ class DnsCodecTest {
         val totalLen = ((pkt[2].toInt() and 0xFF) shl 8) or (pkt[3].toInt() and 0xFF)
         assertEquals(20 + 8 + 3, totalLen)
         assertEquals(17, pkt[9].toInt() and 0xFF) // UDP
-        assertEquals("8.8.8.8", ipAt(pkt, 16))
-        assertEquals("10.42.0.3", ipAt(pkt, 12))
+        // Reply semantics: source = the DNS server (8.8.8.8), destination = the client.
+        assertEquals("8.8.8.8", ipAt(pkt, 12))
+        assertEquals("10.42.0.3", ipAt(pkt, 16))
 
         // verified IPv4 header checksum
         assertEquals(0, checksumVerify(pkt, 0, 20))
@@ -169,7 +170,10 @@ class DnsCodecTest {
         if (srcIp != null && dstIp != null) {
             val s = srcIp.split('.').map { it.toInt() and 0xFF }
             val d = dstIp.split('.').map { it.toInt() and 0xFF }
-            for (i in 0..3) sum += (s[i] shl 8) or d[i]
+            // RFC 768 pseudo-header, 16-bit words: src addr, dst addr,
+            // protocol, UDP length (mirrors DnsCodec.writeUdpChecksum).
+            for (i in 0..3 step 2) sum += (s[i] shl 8) or s[i + 1]
+            for (i in 0..3 step 2) sum += (d[i] shl 8) or d[i + 1]
             sum += 17
             sum += len
         }
