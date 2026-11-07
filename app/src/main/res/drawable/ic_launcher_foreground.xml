@@ -4,21 +4,14 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Shield outline -->
-    <path
-        android:pathData="M54,22 L80,31 L80,52 C80,70 69,82 54,88 C39,82 28,70 28,52 L28,31 Z"
-        android:strokeColor="@color/ic_launcher_foreground"
-        android:strokeWidth="5"
-        android:fillColor="@android:color/transparent" />
-    <!-- Block sign (circle + slash) -->
-    <path
-        android:pathData="M54,44 m-12,0 a12,12 0 1,1 24,0 a12,12 0 1,1 -24,0"
-        android:strokeColor="@color/ic_launcher_foreground"
-        android:strokeWidth="5"
-        android:fillColor="@android:color/transparent" />
-    <path
-        android:pathData="M46,58 L62,42"
-        android:strokeColor="@color/ic_launcher_foreground"
-        android:strokeWidth="5"
-        android:strokeLineCap="round" />
+    <!-- MDI shield-check-outline path, scaled from the Iconify API response. -->
+    <group
+        android:scaleX="4"
+        android:scaleY="4"
+        android:translateX="6"
+        android:translateY="8">
+        <path
+            android:pathData="M21,11 C21,16.55 17.16,21.74 12,23 C6.84,21.74 3,16.55 3,11 V5 L12,1 L21,5 Z M12,21 C15.75,20 19,15.54 19,11.22 V6.3 L12,3.18 L5,6.3 V11.22 C5,15.54 8.25,20 12,21 M10,17 L6,13 L7.41,11.59 L10,14.17 L16.59,7.58 L18,9 Z"
+            android:fillColor="@color/ic_launcher_foreground" />
+    </group>
 </vector>
