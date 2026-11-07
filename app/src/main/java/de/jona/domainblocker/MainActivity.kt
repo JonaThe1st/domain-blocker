@@ -9,9 +9,9 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ListView
 import android.widget.SimpleAdapter
-import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import com.google.android.material.materialswitch.MaterialSwitch
 import java.io.File
 
 /**
@@ -22,7 +22,7 @@ import java.io.File
  */
 class MainActivity : Activity() {
 
-    private lateinit var switchFilter: Switch
+    private lateinit var switchFilter: MaterialSwitch
     private lateinit var listView: ListView
     private lateinit var editDomain: EditText
     private lateinit var editRedirect: EditText
@@ -43,12 +43,10 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (::switchFilter.isInitialized) {
-            // Show the user's persisted intent — the switch is a "wanted ON"
-            // control; live VPN state is checked below for self-heal.
-            switchFilter.isChecked = DomainStore.isFilterEnabled()
+            switchFilter.isChecked = BlockVpnService.isRunning
             if (::editRedirect.isInitialized) editRedirect.setText(DomainStore.redirectUrl())
             // Self-heal: user wants it on but the service is not running.
-            if (DomainStore.isFilterEnabled() && !isVpnRunningSafe()) {
+            if (DomainStore.isFilterEnabled() && !BlockVpnService.isRunning) {
                 startFilter()
             }
         }
@@ -108,7 +106,8 @@ class MainActivity : Activity() {
     }
 
     private fun stopFilter() {
-        stopService(Intent(this, BlockVpnService::class.java))
+        DomainStore.setFilterEnabled(false)
+        startService(Intent(this, BlockVpnService::class.java).setAction(BlockVpnService.ACTION_STOP))
     }
 
     private fun startVpnService() {
@@ -121,6 +120,7 @@ class MainActivity : Activity() {
             if (resultCode == Activity.RESULT_OK) {
                 startVpnService()
             } else {
+                DomainStore.setFilterEnabled(false)
                 switchFilter.isChecked = false
                 showMessage(getString(R.string.vpn_permission_denied))
             }
@@ -156,18 +156,6 @@ class MainActivity : Activity() {
 
     private fun showMessage(text: String) {
         Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
-    }
-
-    /** Never throws: a broken ConnectivityManager must not kill startup. */
-    private fun isVpnRunningSafe(): Boolean {
-        return try {
-            val cm = getSystemService(Activity.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
-                ?: return false
-            val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
-            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)
-        } catch (_: Throwable) {
-            false
-        }
     }
 
     private fun logCrash(t: Throwable) {

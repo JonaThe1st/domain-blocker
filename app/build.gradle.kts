@@ -31,9 +31,10 @@ android {
 
 // Kotlin-stdlib only: Kotlin classes reference kotlin.jvm.internal.* at
 // runtime; without it the process dies during class loading (before any
-// app code or exception handler can run). No androidx/material.
+// app code or exception handler can run).
 dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.4.0")
+    implementation("com.google.android.material:material:1.12.0")
 
     // JVM unit tests: DNS codec/matcher/server are pure JVM.
     testImplementation("junit:junit:4.13.2")
