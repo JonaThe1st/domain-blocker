@@ -5,8 +5,11 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.VpnService
+import android.os.Build
 import android.os.ParcelFileDescriptor
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -28,6 +31,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 class BlockVpnService : VpnService() {
 
     private val running = AtomicBoolean(false)
+    private val domainsChangedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: Intent) {
+            if (intent.action == DomainStore.ACTION_DOMAINS_CHANGED) {
+                DomainStore.reload(context)
+            }
+        }
+    }
     private var tunFd: ParcelFileDescriptor? = null
     private var redirectServer: RedirectServer? = null
     // The tunnel read loop must NEVER block on a synchronous relay, or one
@@ -38,14 +48,28 @@ class BlockVpnService : VpnService() {
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = false
         DomainStore.init(this)
+        val filter = IntentFilter(DomainStore.ACTION_DOMAINS_CHANGED)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(domainsChangedReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(domainsChangedReceiver, filter)
+        }
         CrashLog.write(this, "== service onCreate")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         CrashLog.write(this, "onStartCommand intent=$intent running=${running.get()}")
+        if (intent?.action == ACTION_STOP) {
+            DomainStore.setFilterEnabled(false)
+            stopTunnel()
+            stopSelf()
+            return START_NOT_STICKY
+        }
         startForegroundSafe()
         if (running.compareAndSet(false, true)) {
+            isRunning = true
             val server = RedirectServer({ DomainStore.redirectUrl() })
             server.start()
             redirectServer = server
@@ -56,12 +80,8 @@ class BlockVpnService : VpnService() {
 
     override fun onDestroy() {
         CrashLog.write(this, "onDestroy filterEnabled=${DomainStore.isFilterEnabled()} running=${running.get()}")
-        running.set(false)
-        redirectServer?.stop()
-        redirectServer = null
-        tunFd?.close()
-        tunFd = null
-        relayPool.shutdownNow()
+        stopTunnel()
+        unregisterReceiver(domainsChangedReceiver)
         super.onDestroy()
         // Self-heal: if the tunnel died without the user switching the
         // filter off, bring the service back in a few seconds. This covers
@@ -102,9 +122,12 @@ class BlockVpnService : VpnService() {
                 .addRoute(DNS_3, 32)
                 .setBlocking(true)
             val fd = builder.establish() ?: run {
+                running.set(false)
+                isRunning = false
                 stopSelf()
                 return
             }
+            isRunning = true
             tunFd = fd
             val input = FileInputStream(fd.fileDescriptor)
             val output = FileOutputStream(fd.fileDescriptor)
@@ -121,12 +144,19 @@ class BlockVpnService : VpnService() {
             CrashLog.write(this, "tunnel error: $t")
         } finally {
             CrashLog.write(this, "tunnel exit running=${running.get()} filterEnabled=${DomainStore.isFilterEnabled()}")
-            running.set(false)
-            redirectServer?.stop()
-            tunFd?.close()
-            tunFd = null
+            stopTunnel()
             stopSelf()
         }
+    }
+
+    private fun stopTunnel() {
+        running.set(false)
+        isRunning = false
+        redirectServer?.stop()
+        redirectServer = null
+        tunFd?.close()
+        tunFd = null
+        relayPool.shutdownNow()
     }
 
     /**
@@ -279,6 +309,11 @@ class BlockVpnService : VpnService() {
     }
 
     companion object {
+        const val ACTION_STOP = "de.jona.domainblocker.ACTION_STOP"
+        @Volatile
+        var isRunning: Boolean = false
+            private set
+
         private const val CHANNEL_ID = "blocker_status"
         private const val NOTIF_ID = 1
 

@@ -1,6 +1,7 @@
 package de.jona.domainblocker
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import java.util.concurrent.ConcurrentHashMap
 
@@ -17,14 +18,21 @@ object DomainStore {
     private const val KEY_FILTER_ENABLED = "filter_enabled"
 
     const val DEFAULT_REDIRECT = "https://de.wikipedia.org/wiki/Fokus"
+    const val ACTION_DOMAINS_CHANGED = "de.jona.domainblocker.ACTION_DOMAINS_CHANGED"
 
     private val domains = ConcurrentHashMap.newKeySet<String>()
     private lateinit var prefs: SharedPreferences
+    private lateinit var appContext: Context
 
     fun init(context: Context) {
-        prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        appContext = context.applicationContext
+        prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         domains.clear()
         domains.addAll(prefs.getStringSet(KEY_DOMAINS, emptySet()) ?: emptySet())
+    }
+
+    fun reload(context: Context) {
+        init(context)
     }
 
     /** True if [domain] (or a subdomain of it) is on the blocklist. Suffix match. */
@@ -60,5 +68,8 @@ object DomainStore {
 
     private fun persist() {
         prefs.edit().putStringSet(KEY_DOMAINS, domains.toSet()).apply()
+        appContext.sendBroadcast(
+            Intent(ACTION_DOMAINS_CHANGED).setPackage(appContext.packageName)
+        )
     }
 }

@@ -1,7 +1,9 @@
 package de.jona.domainblocker
 
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.VpnService
 import android.os.Bundle
 import android.view.View
@@ -29,6 +31,16 @@ class MainActivity : Activity() {
     private lateinit var crashLogView: TextView
 
     private val vpnRequestCode = 1001
+    private var domainsReceiverRegistered = false
+    private val domainsChangedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: Intent) {
+            if (intent.action == DomainStore.ACTION_DOMAINS_CHANGED &&
+                ::listView.isInitialized
+            ) {
+                refreshList()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         try {
@@ -43,15 +55,28 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (::switchFilter.isInitialized) {
-            // Show the user's persisted intent — the switch is a "wanted ON"
-            // control; live VPN state is checked below for self-heal.
-            switchFilter.isChecked = DomainStore.isFilterEnabled()
+            switchFilter.isChecked = BlockVpnService.isRunning
             if (::editRedirect.isInitialized) editRedirect.setText(DomainStore.redirectUrl())
-            // Self-heal: user wants it on but the service is not running.
-            if (DomainStore.isFilterEnabled() && !isVpnRunningSafe()) {
-                startFilter()
-            }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val filter = IntentFilter(DomainStore.ACTION_DOMAINS_CHANGED)
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(domainsChangedReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(domainsChangedReceiver, filter)
+        }
+        domainsReceiverRegistered = true
+    }
+
+    override fun onStop() {
+        if (domainsReceiverRegistered) {
+            unregisterReceiver(domainsChangedReceiver)
+            domainsReceiverRegistered = false
+        }
+        super.onStop()
     }
 
     private fun bootstrap() {
@@ -79,10 +104,8 @@ class MainActivity : Activity() {
             )
         }
 
-        // Restore the user's persisted intent FIRST, before any listener
-        // is attached, so a reopened app shows the filter state the user
-        // left it in (even if the service is not running right now).
-        switchFilter.isChecked = DomainStore.isFilterEnabled()
+        // Read live service state before attaching the listener.
+        switchFilter.isChecked = BlockVpnService.isRunning
         switchFilter.setOnCheckedChangeListener { _, checked ->
             DomainStore.setFilterEnabled(checked)
             if (checked) startFilter() else stopFilter()
@@ -108,7 +131,9 @@ class MainActivity : Activity() {
     }
 
     private fun stopFilter() {
-        stopService(Intent(this, BlockVpnService::class.java))
+        startService(
+            Intent(this, BlockVpnService::class.java).setAction(BlockVpnService.ACTION_STOP)
+        )
     }
 
     private fun startVpnService() {
@@ -121,6 +146,7 @@ class MainActivity : Activity() {
             if (resultCode == Activity.RESULT_OK) {
                 startVpnService()
             } else {
+                DomainStore.setFilterEnabled(false)
                 switchFilter.isChecked = false
                 showMessage(getString(R.string.vpn_permission_denied))
             }
