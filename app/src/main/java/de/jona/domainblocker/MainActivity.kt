@@ -14,6 +14,7 @@ import android.widget.ListView
 import android.widget.SimpleAdapter
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.materialswitch.MaterialSwitch
 import java.io.File
 
@@ -23,7 +24,7 @@ import java.io.File
  * The onCreate body is wrapped in try/catch with an inline fallback so a
  * setup failure can never leave a blank/flashing window.
  */
-class MainActivity : Activity() {
+class MainActivity : AppCompatActivity() {
 
     private lateinit var switchFilter: MaterialSwitch
     private lateinit var listView: ListView
@@ -37,6 +38,8 @@ class MainActivity : Activity() {
     }
 
     private val vpnRequestCode = 1001
+    private var vpnPermissionRequestInFlight = false
+    private var selfHealAttempted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         try {
@@ -51,10 +54,16 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (::switchFilter.isInitialized) {
-            switchFilter.isChecked = BlockVpnService.isRunning
+            setSwitchCheckedWithoutListener(BlockVpnService.isRunning)
             if (::editRedirect.isInitialized) editRedirect.setText(DomainStore.redirectUrl())
-            // Self-heal: user wants it on but the service is not running.
-            if (DomainStore.isFilterEnabled() && !BlockVpnService.isRunning) {
+            // Attempt recovery once per activity process, but never while the
+            // system VPN permission dialog is already in progress.
+            if (DomainStore.isFilterEnabled() &&
+                !BlockVpnService.isRunning &&
+                !selfHealAttempted &&
+                !vpnPermissionRequestInFlight
+            ) {
+                selfHealAttempted = true
                 startFilter()
             }
         }
@@ -116,8 +125,10 @@ class MainActivity : Activity() {
     }
 
     private fun startFilter() {
+        if (vpnPermissionRequestInFlight) return
         val intent = VpnService.prepare(this)
         if (intent != null) {
+            vpnPermissionRequestInFlight = true
             startActivityForResult(intent, vpnRequestCode)
         } else {
             startVpnService()
@@ -136,6 +147,7 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == vpnRequestCode) {
+            vpnPermissionRequestInFlight = false
             if (resultCode == Activity.RESULT_OK) {
                 startVpnService()
             } else {
@@ -143,6 +155,16 @@ class MainActivity : Activity() {
                 switchFilter.isChecked = false
                 showMessage(getString(R.string.vpn_permission_denied))
             }
+        }
+    }
+
+    private fun setSwitchCheckedWithoutListener(checked: Boolean) {
+        if (switchFilter.isChecked == checked) return
+        switchFilter.setOnCheckedChangeListener(null)
+        switchFilter.isChecked = checked
+        switchFilter.setOnCheckedChangeListener { _, enabled ->
+            DomainStore.setFilterEnabled(enabled)
+            if (enabled) startFilter() else stopFilter()
         }
     }
 
