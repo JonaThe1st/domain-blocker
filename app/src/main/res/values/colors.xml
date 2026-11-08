@@ -3,7 +3,12 @@
     <color name="primary">#3F51B5</color>
     <color name="primary_dark">#303F9F</color>
     <color name="on_primary">#FFFFFF</color>
-    <color name="background">#F6F7FB</color>
+    <color name="background">#F4F6FC</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="outline">#D5D9E5</color>
+    <color name="text_primary">#202124</color>
+    <color name="text_secondary">#606572</color>
+    <color name="switch_track">#B8BED3</color>
     <color name="ic_launcher_background">#3F51B5</color>
     <color name="ic_launcher_foreground">#FFFFFF</color>
 </resources>
