@@ -74,7 +74,7 @@ class RedirectServer(
 
             var line = readLine(input) ?: return
             if (line.isEmpty()) line = readLine(input) ?: return
-            val requestLine = line.split(" ")
+            val requestLine = line.trim().split(Regex("\\s+"), limit = 3)
             if (requestLine.size < 2 || requestLine[0].uppercase() !in setOf("GET", "HEAD")) {
                 output.write(
                     "HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"

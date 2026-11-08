@@ -33,6 +33,12 @@ class DomainMatcherTest {
     fun caseAndDotInsensitive() {
         assertTrue(DomainMatcher.isBlocked("INSTAGRAM.COM", blocked))
         assertTrue(DomainMatcher.isBlocked("instagram.com.", blocked))
+        assertTrue(DomainMatcher.isBlocked("  WWW.INSTAGRAM.COM.  ", setOf(" Instagram.COM. ")))
+    }
+
+    @Test
+    fun emptyBlockedEntriesAreIgnored() {
+        assertFalse(DomainMatcher.isBlocked("example.com", setOf("", "   ", ".")))
     }
 
     @Test
@@ -49,6 +55,20 @@ class DomainMatcherTest {
         assertEquals("x.com", DomainMatcher.normalize("X.com:8080/path"))
         assertNull(DomainMatcher.normalize(""))
         assertNull(DomainMatcher.normalize("not a host"))
+        assertNull(DomainMatcher.normalize("foo\tbar.com"))
+        assertNull(DomainMatcher.normalize("foo\nbar.com"))
         assertNull(DomainMatcher.normalize("localhost"))
+    }
+
+    @Test
+    fun normalizeSupportsIdnLikeUnicodeAndTrailingDot() {
+        assertEquals("例え.テスト", DomainMatcher.normalize("https://例え.テスト./path"))
+        assertEquals("example.com", DomainMatcher.normalize("WWW.EXAMPLE.COM."))
+    }
+
+    @Test
+    fun normalizeRejectsEmptyOrDotOnlyHosts() {
+        assertNull(DomainMatcher.normalize("..."))
+        assertNull(DomainMatcher.normalize("  "))
     }
 }

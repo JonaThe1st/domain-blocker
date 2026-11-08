@@ -11,6 +11,20 @@ object DnsCodec {
 
     class Question(val domain: String, val qtype: Int, val questionEnd: Int)
 
+    /** Returns true only for a complete IPv4 UDP packet addressed to DNS. */
+    fun isDnsUdpPacket(buf: ByteArray, len: Int): Boolean {
+        if (len < 20 || len > buf.size) return false
+        val version = (buf[0].toInt() ushr 4) and 0x0F
+        val ihl = (buf[0].toInt() and 0x0F) * 4
+        val totalLen = ((buf[2].toInt() and 0xFF) shl 8) or (buf[3].toInt() and 0xFF)
+        if (version != 4 || ihl < 20 || totalLen < ihl + 8 || totalLen > len) return false
+        if ((buf[9].toInt() and 0xFF) != PROTO_UDP) return false
+        val udpLen = ((buf[ihl + 4].toInt() and 0xFF) shl 8) or (buf[ihl + 5].toInt() and 0xFF)
+        if (udpLen < 8 || ihl + udpLen > totalLen) return false
+        val dstPort = ((buf[ihl + 2].toInt() and 0xFF) shl 8) or (buf[ihl + 3].toInt() and 0xFF)
+        return dstPort == 53
+    }
+
     /** Extracts the question name (no compression in queries) + QTYPE. */
     fun parseQuestion(data: ByteArray): Question? {
         if (data.size < 12) return null
@@ -26,6 +40,7 @@ object DnsCodec {
                 break
             }
             if (labelLen and 0xC0 == 0xC0) return null // compression not expected
+            if (labelLen > 63) return null
             if (pos + 1 + labelLen > data.size) return null
             if (sb.isNotEmpty()) sb.append('.')
             for (i in 1..labelLen) sb.append((data[pos + i].toInt() and 0xFF).toChar())

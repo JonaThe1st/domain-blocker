@@ -8,7 +8,8 @@ object DomainMatcher {
         val d = host.trim().lowercase().removeSuffix(".")
         if (d.isEmpty()) return false
         for (b in blocked) {
-            if (d == b || d.endsWith(".$b")) return true
+            val entry = b.trim().lowercase().removeSuffix(".")
+            if (entry.isNotEmpty() && (d == entry || d.endsWith(".$entry"))) return true
         }
         return false
     }
@@ -17,10 +18,12 @@ object DomainMatcher {
     fun normalize(raw: String): String? {
         var s = raw.trim().lowercase()
             .removePrefix("https://").removePrefix("http://")
-        var host = s.substringBefore('/').substringBefore(':')
+        var host = s.substringBefore('/').substringBefore('?').substringBefore('#').substringBefore(':')
         if (host.startsWith("www.")) host = host.removePrefix("www.")
-        host = host.removeSuffix(".")
-        if (host.isEmpty() || host.contains(' ') || !host.contains('.')) return null
+        host = host.trimEnd('.')
+        if (host.isEmpty() || host.any { it.isWhitespace() } || !host.contains('.') ||
+            host.split('.').any { it.isEmpty() }
+        ) return null
         return host
     }
 }

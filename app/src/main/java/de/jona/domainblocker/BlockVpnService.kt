@@ -166,23 +166,15 @@ class BlockVpnService : VpnService() {
      */
     private fun handlePacket(buf: ByteArray, len: Int, output: FileOutputStream) {
         try {
-            if (len < 20) return
-            val version = (buf[0].toInt() ushr 4) and 0x0F
+            if (!DnsCodec.isDnsUdpPacket(buf, len)) return
             val ihl = (buf[0].toInt() and 0x0F) * 4
             val totalLen = ((buf[2].toInt() and 0xFF) shl 8) or (buf[3].toInt() and 0xFF)
-            if (version != 4 || ihl < 20 || totalLen < ihl + 8 || totalLen > len) return
-
-            val protocol = buf[9].toInt() and 0xFF
-            if (protocol != DnsCodec.PROTO_UDP) return // only DNS (UDP) is routed/captured
-
             val srcIp = DnsCodec.readIp(buf, 12)
             val dstIp = DnsCodec.readIp(buf, 16)
 
             val udpLen = ((buf[ihl + 4].toInt() and 0xFF) shl 8) or (buf[ihl + 5].toInt() and 0xFF)
-            if (udpLen < 8 || ihl + udpLen > totalLen) return
             val srcPort = ((buf[ihl].toInt() and 0xFF) shl 8) or (buf[ihl + 1].toInt() and 0xFF)
             val dstPort = ((buf[ihl + 2].toInt() and 0xFF) shl 8) or (buf[ihl + 3].toInt() and 0xFF)
-            if (dstPort != 53) return
 
             val payload = buf.copyOfRange(ihl + 8, ihl + udpLen)
             val parsed = DnsCodec.parseQuestion(payload) ?: return

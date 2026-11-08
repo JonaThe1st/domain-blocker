@@ -74,6 +74,20 @@ class DnsCodecTest {
     }
 
     @Test
+    fun rejectsOversizedLabel() {
+        val data = buildQuery("a.com").toMutableList()
+        data[12] = 64
+        assertNull(DnsCodec.parseQuestion(data.toByteArray()))
+    }
+
+    @Test
+    fun rejectsHeaderWithoutQuestions() {
+        val data = buildQuery("example.com").copyOf()
+        data[5] = 0
+        assertNull(DnsCodec.parseQuestion(data))
+    }
+
+    @Test
     fun rejectsEmptyPacket() {
         assertNull(DnsCodec.parseQuestion(ByteArray(0)))
     }
@@ -134,6 +148,20 @@ class DnsCodecTest {
         assertEquals(0, Message(resp).getSection(Section.ANSWER).size)
     }
 
+    @Test
+    fun blockedReply_echoesQuestionAndSetsResponseFlags() {
+        val query = buildQuery("WWW.Example.COM", Type.A, id = 0x4567)
+        val q = DnsCodec.parseQuestion(query)!!
+        val resp = DnsCodec.blockedReply(query, q)
+
+        assertArrayEquals(query.copyOfRange(12, q.questionEnd), resp.copyOfRange(12, q.questionEnd))
+        assertEquals(0x80, resp[2].toInt() and 0x80) // QR
+        assertEquals(0, resp[3].toInt() and 0x0F) // NOERROR
+        assertEquals(1, resp[5].toInt() and 0xFF) // QDCOUNT low byte = 1 (question echoed)
+        assertEquals(0, resp[6].toInt() and 0xFF) // ANCOUNT high = 0
+        assertEquals(1, resp[7].toInt() and 0xFF) // ANCOUNT low = 1 (A record)
+    }
+
     // ---- wrapIp --------------------------------------------------------
 
     @Test
@@ -159,6 +187,12 @@ class DnsCodecTest {
         // UDP checksum (with pseudo-header) must verify to 0
         assertEquals(0, checksumVerify(pkt, 20, udpLen, "8.8.8.8", "10.42.0.3"))
         assertArrayEquals(dns, pkt.copyOfRange(28, 31))
+    }
+
+    @Test
+    fun wrapIp_matchesIndependentRfc768ChecksumVector() {
+        val pkt = DnsCodec.wrapIp(byteArrayOf(0x11, 0x22, 0x33), "8.8.8.8", "10.42.0.3", 53, 55555)
+        assertEquals(0xC840, ((pkt[26].toInt() and 0xFF) shl 8) or (pkt[27].toInt() and 0xFF))
     }
 
     private fun ipAt(buf: ByteArray, off: Int): String =
@@ -197,5 +231,21 @@ class DnsCodecTest {
         val udpLen = ((wire[24].toInt() and 0xFF) shl 8) or (wire[25].toInt() and 0xFF)
         assertEquals(dns.size + 8, udpLen)
         assertTrue(udpLen > 8)
+    }
+
+    @Test
+    fun isDnsUdpPacket_filtersShortNonUdpAndNonDnsPackets() {
+        val packet = DnsCodec.wrapIp(byteArrayOf(1, 2, 3), "10.0.0.2", "8.8.8.8", 4321, 53)
+        assertTrue(DnsCodec.isDnsUdpPacket(packet, packet.size))
+        assertTrue(!DnsCodec.isDnsUdpPacket(packet, 19))
+
+        val nonUdp = packet.copyOf().also { it[9] = 6 }
+        assertTrue(!DnsCodec.isDnsUdpPacket(nonUdp, nonUdp.size))
+
+        val nonDnsPort = packet.copyOf().also { it[22] = 0x35; it[23] = 0x00 }
+        assertTrue(!DnsCodec.isDnsUdpPacket(nonDnsPort, nonDnsPort.size))
+
+        val truncatedUdp = packet.copyOf().also { it[24] = 0; it[25] = 7 }
+        assertTrue(!DnsCodec.isDnsUdpPacket(truncatedUdp, truncatedUdp.size))
     }
 }
