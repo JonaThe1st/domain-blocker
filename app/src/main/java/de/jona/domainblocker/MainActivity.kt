@@ -39,7 +39,6 @@ class MainActivity : AppCompatActivity() {
 
     private val vpnRequestCode = 1001
     private var vpnPermissionRequestInFlight = false
-    private var selfHealAttempted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         try {
@@ -56,16 +55,6 @@ class MainActivity : AppCompatActivity() {
         if (::switchFilter.isInitialized) {
             setSwitchCheckedWithoutListener(BlockVpnService.isRunning)
             if (::editRedirect.isInitialized) editRedirect.setText(DomainStore.redirectUrl())
-            // Attempt recovery once per activity process, but never while the
-            // system VPN permission dialog is already in progress.
-            if (DomainStore.isFilterEnabled() &&
-                !BlockVpnService.isRunning &&
-                !selfHealAttempted &&
-                !vpnPermissionRequestInFlight
-            ) {
-                selfHealAttempted = true
-                startFilter()
-            }
         }
 
     }

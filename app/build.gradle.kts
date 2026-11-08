@@ -27,6 +27,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 // Kotlin-stdlib only: Kotlin classes reference kotlin.jvm.internal.* at
@@ -40,4 +44,6 @@ dependencies {
     // JVM unit tests: DNS codec/matcher/server are pure JVM.
     testImplementation("junit:junit:4.13.2")
     testImplementation("dnsjava:dnsjava:3.5.3")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("org.robolectric:robolectric:4.14.1")
 }
