@@ -17,6 +17,7 @@ class BlockerApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashLog.write(this, "app create")
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             val sw = StringWriter()
             throwable.printStackTrace(PrintWriter(sw))

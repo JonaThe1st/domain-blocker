@@ -12,10 +12,9 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ListView
 import android.widget.SimpleAdapter
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
-import com.google.android.material.materialswitch.MaterialSwitch
 import java.io.File
 
 /**
@@ -24,9 +23,9 @@ import java.io.File
  * The onCreate body is wrapped in try/catch with an inline fallback so a
  * setup failure can never leave a blank/flashing window.
  */
-class MainActivity : AppCompatActivity() {
+class MainActivity : Activity() {
 
-    private lateinit var switchFilter: MaterialSwitch
+    private lateinit var switchFilter: Switch
     private lateinit var listView: ListView
     private lateinit var editDomain: EditText
     private lateinit var editRedirect: EditText
@@ -42,7 +41,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         try {
+            CrashLog.write(this, "boot: step 0 before super.onCreate")
             super.onCreate(savedInstanceState)
+            CrashLog.write(this, "boot: step 1 after super.onCreate")
             bootstrap()
         } catch (t: Throwable) {
             logCrash(t)
@@ -71,6 +72,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun bootstrap() {
         setContentView(R.layout.activity_main)
+        CrashLog.write(this, "boot: step 2 after setContentView")
 
         switchFilter = findViewById(R.id.switch_filter)
         listView = findViewById(R.id.list_domains)
@@ -81,6 +83,7 @@ class MainActivity : AppCompatActivity() {
         val btnSave = findViewById<Button>(R.id.btn_save)
 
         DomainStore.init(this)
+        CrashLog.write(this, "boot: step 3 after DomainStore.init")
 
         // Android 13+: without POST_NOTIFICATIONS the persistent VPN
         // notification never shows, which makes Samsung's task killer treat
@@ -111,6 +114,8 @@ class MainActivity : AppCompatActivity() {
         editRedirect.setText(DomainStore.redirectUrl())
         refreshList()
         updateCrashLog()
+        CrashLog.write(this, "boot: step 5 after listeners attached")
+        CrashLog.write(this, "boot: step 6 before onResume-relevant code")
     }
 
     private fun startFilter() {

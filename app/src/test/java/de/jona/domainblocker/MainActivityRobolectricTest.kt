@@ -5,11 +5,10 @@ import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
-import org.junit.runner.RunWith
-import androidx.lifecycle.Lifecycle
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.junit.runner.RunWith
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [Build.VERSION_CODES.UPSIDE_DOWN_CAKE])
@@ -21,7 +20,7 @@ class MainActivityRobolectricTest {
             .setup()
             .get()
 
-        assertEquals(Lifecycle.State.RESUMED, activity.lifecycle.currentState)
+        assertEquals(false, activity.isFinishing)
         assertNotNull(activity.findViewById<android.view.View>(R.id.switch_filter))
         assertNotNull(activity.findViewById<android.view.View>(R.id.edit_domain))
         assertNotNull(activity.findViewById<android.view.View>(R.id.edit_redirect))

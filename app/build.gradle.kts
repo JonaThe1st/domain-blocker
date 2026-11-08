@@ -38,8 +38,6 @@ android {
 // app code or exception handler can run).
 dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.4.0")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("com.google.android.material:material:1.12.0")
 
     // JVM unit tests: DNS codec/matcher/server are pure JVM.
     testImplementation("junit:junit:4.13.2")
